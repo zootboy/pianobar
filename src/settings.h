@@ -86,7 +86,6 @@ typedef struct {
 typedef struct {
 	bool autoselect;
 	unsigned int history, maxPlayerErrors;
-	int volume;
 	BarStationSorting_t sortOrder;
 	PianoAudioQuality_t audioQuality;
 	char *username;

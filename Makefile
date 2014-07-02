@@ -27,7 +27,6 @@ endif
 PIANOBAR_DIR:=src
 PIANOBAR_SRC:=\
 		${PIANOBAR_DIR}/main.c \
-		${PIANOBAR_DIR}/player.c \
 		${PIANOBAR_DIR}/settings.c \
 		${PIANOBAR_DIR}/terminal.c \
 		${PIANOBAR_DIR}/ui_act.c \
@@ -35,7 +34,6 @@ PIANOBAR_SRC:=\
 		${PIANOBAR_DIR}/ui_readline.c \
 		${PIANOBAR_DIR}/ui_dispatch.c
 PIANOBAR_HDR:=\
-		${PIANOBAR_DIR}/player.h \
 		${PIANOBAR_DIR}/settings.h \
 		${PIANOBAR_DIR}/terminal.h \
 		${PIANOBAR_DIR}/ui_act.h \
@@ -73,9 +71,6 @@ LIBWAITRESS_INCLUDE:=${LIBWAITRESS_DIR}
 LIBWAITRESS_TEST_SRC=${LIBWAITRESS_DIR}/waitress-test.c
 LIBWAITRESS_TEST_OBJ:=${LIBWAITRESS_TEST_SRC:.c=.o}
 
-LIBAV_CFLAGS=$(shell pkg-config --cflags libavcodec libavformat libavutil libavfilter)
-LIBAV_LDFLAGS=$(shell pkg-config --libs libavcodec libavformat libavutil libavfilter)
-
 LIBGNUTLS_CFLAGS:=$(shell pkg-config --cflags gnutls)
 LIBGNUTLS_LDFLAGS:=$(shell pkg-config --libs gnutls)
 
@@ -87,10 +82,10 @@ LIBJSONC_LDFLAGS:=$(shell pkg-config --libs json-c 2>/dev/null || pkg-config --l
 
 # combine all flags
 ALL_CFLAGS:=${CFLAGS} -I ${LIBPIANO_INCLUDE} -I ${LIBWAITRESS_INCLUDE} \
-			${LIBAV_CFLAGS} ${LIBGNUTLS_CFLAGS} \
+			${LIBGNUTLS_CFLAGS} \
 			${LIBGCRYPT_CFLAGS} ${LIBJSONC_CFLAGS}
-ALL_LDFLAGS:=${LDFLAGS} -lao -lpthread -lm \
-			${LIBAV_LDFLAGS} ${LIBGNUTLS_LDFLAGS} \
+ALL_LDFLAGS:=${LDFLAGS} -lm \
+			${LIBGNUTLS_LDFLAGS} \
 			${LIBGCRYPT_LDFLAGS} ${LIBJSONC_LDFLAGS}
 
 # build pianobar

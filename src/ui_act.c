@@ -27,6 +27,8 @@ THE SOFTWARE.
 #include <unistd.h>
 #include <pthread.h>
 #include <assert.h>
+#include <sys/types.h>
+#include <signal.h>
 
 #include "ui.h"
 #include "ui_readline.h"
@@ -35,7 +37,7 @@ THE SOFTWARE.
 /*	standard eventcmd call
  */
 #define BarUiActDefaultEventcmd(name) BarUiStartEventCmd (&app->settings, \
-		name, selStation, selSong, &app->player, app->ph.stations, \
+		name, selStation, selSong, app->ph.stations, \
 		pRet, wRet)
 
 /*	standard piano call
@@ -43,17 +45,9 @@ THE SOFTWARE.
 #define BarUiActDefaultPianoCall(call, arg) BarUiPianoCall (app, \
 		call, arg, &pRet, &wRet)
 
-/*	helper to _really_ skip a song (unlock mutex, quit player)
- *	@param player handle
- */
-static inline void BarUiDoSkipSong (player_t * const player) {
-	assert (player != NULL);
-
-	pthread_mutex_lock (&player->pauseMutex);
-	player->doQuit = true;
-	player->doPause = false;
-	pthread_cond_broadcast (&player->pauseCond);
-	pthread_mutex_unlock (&player->pauseMutex);
+static void skipSong (const BarApp_t * const app) {
+	assert (app->playerPid != BAR_NO_PLAYER);
+	kill (app->playerPid, SIGTERM);
 }
 
 /*	transform station if necessary to allow changes like rename, rate, ...
@@ -145,7 +139,7 @@ BarUiActCallback(BarUiActBanSong) {
 	BarUiMsg (&app->settings, MSG_INFO, "Banning song... ");
 	if (BarUiActDefaultPianoCall (PIANO_REQUEST_RATE_SONG, &reqData) &&
 			selSong == app->playlist) {
-		BarUiDoSkipSong (&app->player);
+		skipSong (app);
 	}
 	BarUiActDefaultEventcmd ("songban");
 }
@@ -232,7 +226,7 @@ BarUiActCallback(BarUiActDeleteStation) {
 		BarUiMsg (&app->settings, MSG_INFO, "Deleting station... ");
 		if (BarUiActDefaultPianoCall (PIANO_REQUEST_DELETE_STATION,
 				selStation) && selStation == app->curStation) {
-			BarUiDoSkipSong (&app->player);
+			skipSong (app);
 			PianoDestroyPlaylist (PianoListNextP (app->playlist));
 			app->playlist->head.next = NULL;
 			BarUiHistoryPrepend (app, app->playlist);
@@ -404,34 +398,39 @@ BarUiActCallback(BarUiActLoveSong) {
 /*	skip song
  */
 BarUiActCallback(BarUiActSkipSong) {
-	BarUiDoSkipSong (&app->player);
+	skipSong (app);
 }
 
 /*	play
  */
 BarUiActCallback(BarUiActPlay) {
-	pthread_mutex_lock (&app->player.pauseMutex);
-	app->player.doPause = false;
-	pthread_cond_broadcast (&app->player.pauseCond);
-	pthread_mutex_unlock (&app->player.pauseMutex);
+	assert (app->playerPid != BAR_NO_PLAYER);
+	if (app->paused) {
+		kill (app->playerPid, SIGCONT);
+		app->paused = false;
+	}
 }
 
 /*	pause
  */
 BarUiActCallback(BarUiActPause) {
-	pthread_mutex_lock (&app->player.pauseMutex);
-	app->player.doPause = true;
-	pthread_cond_broadcast (&app->player.pauseCond);
-	pthread_mutex_unlock (&app->player.pauseMutex);
+	assert (app->playerPid != BAR_NO_PLAYER);
+	if (!app->paused) {
+		kill (app->playerPid, SIGSTOP);
+		app->paused = true;
+	}
 }
 
 /*	toggle pause
  */
 BarUiActCallback(BarUiActTogglePause) {
-	pthread_mutex_lock (&app->player.pauseMutex);
-	app->player.doPause = !app->player.doPause;
-	pthread_cond_broadcast (&app->player.pauseCond);
-	pthread_mutex_unlock (&app->player.pauseMutex);
+	assert (app->playerPid != BAR_NO_PLAYER);
+	if (app->paused) {
+		kill (app->playerPid, SIGCONT);
+	} else {
+		kill (app->playerPid, SIGSTOP);
+	}
+	app->paused = !app->paused;
 }
 
 /*	rename current station
@@ -467,7 +466,7 @@ BarUiActCallback(BarUiActSelectStation) {
 	if (newStation != NULL) {
 		app->curStation = newStation;
 		BarUiPrintStation (&app->settings, app->curStation);
-		BarUiDoSkipSong (&app->player);
+		skipSong (app);
 		if (app->playlist != NULL) {
 			PianoDestroyPlaylist (PianoListNextP (app->playlist));
 			app->playlist->head.next = NULL;
@@ -488,7 +487,7 @@ BarUiActCallback(BarUiActTempBanSong) {
 	BarUiMsg (&app->settings, MSG_INFO, "Putting song on shelf... ");
 	if (BarUiActDefaultPianoCall (PIANO_REQUEST_ADD_TIRED_SONG, selSong) &&
 			selSong == app->playlist) {
-		BarUiDoSkipSong (&app->player);
+		skipSong (app);
 	}
 	BarUiActDefaultEventcmd ("songshelf");
 }
@@ -571,8 +570,7 @@ BarUiActCallback(BarUiActSelectQuickMix) {
 /*	quit
  */
 BarUiActCallback(BarUiActQuit) {
-	app->doQuit = true;
-	BarUiDoSkipSong (&app->player);
+	app->quit = true;
 }
 
 /*	song history
@@ -635,27 +633,6 @@ BarUiActCallback(BarUiActBookmark) {
 		BarUiActDefaultPianoCall (PIANO_REQUEST_BOOKMARK_ARTIST, selSong);
 		BarUiActDefaultEventcmd ("artistbookmark");
 	}
-}
-
-/*	decrease volume
- */
-BarUiActCallback(BarUiActVolDown) {
-	--app->settings.volume;
-	BarPlayerSetVolume (&app->player);
-}
-
-/*	increase volume
- */
-BarUiActCallback(BarUiActVolUp) {
-	++app->settings.volume;
-	BarPlayerSetVolume (&app->player);
-}
-
-/*	reset volume
- */
-BarUiActCallback(BarUiActVolReset) {
-	app->settings.volume = 0;
-	BarPlayerSetVolume (&app->player);
 }
 
 /*	manage station (remove seeds or feedback)

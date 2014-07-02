@@ -181,6 +181,7 @@ int BarUiPianoCall (BarApp_t * const app, PianoRequestType_t type,
 			PianoDestroyRequest (&req);
 			return 0;
 		}
+		printf ("%s\n", req.responseData);
 
 		*pRet = PianoResponse (&app->ph, &req);
 		if (*pRet != PIANO_RET_CONTINUE_REQUEST) {
@@ -682,10 +683,10 @@ size_t BarUiListSongs (const BarSettings_t *settings,
  *	@param piano error-code (PIANO_RET_OK if not applicable)
  *	@param waitress error-code (WAITRESS_RET_OK if not applicable)
  */
-void BarUiStartEventCmd (const BarSettings_t *settings, const char *type,
-		const PianoStation_t *curStation, const PianoSong_t *curSong,
-		const player_t * const player, PianoStation_t *stations,
-                PianoReturn_t pRet, WaitressReturn_t wRet) {
+void BarUiStartEventCmd (const BarSettings_t * const settings,
+		const char * const type, const PianoStation_t * const curStation,
+		const PianoSong_t * const curSong, PianoStation_t * const stations,
+		const PianoReturn_t pRet, const WaitressReturn_t wRet) {
 	pid_t chld;
 	int pipeFd[2];
 
@@ -736,7 +737,6 @@ void BarUiStartEventCmd (const BarSettings_t *settings, const char *type,
 				"wRet=%i\n"
 				"wRetStr=%s\n"
 				"songDuration=%u\n"
-				"songPlayed=%u\n"
 				"rating=%i\n"
 				"detailUrl=%s\n",
 				curSong == NULL ? "" : curSong->artist,
@@ -749,8 +749,7 @@ void BarUiStartEventCmd (const BarSettings_t *settings, const char *type,
 				PianoErrorToStr (pRet),
 				wRet,
 				WaitressErrorToStr (wRet),
-				player->songDuration,
-				player->songPlayed,
+				curSong->length,
 				curSong == NULL ? PIANO_RATE_NONE : curSong->rating,
 				curSong == NULL ? "" : curSong->detailUrl
 				);

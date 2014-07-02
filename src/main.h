@@ -27,23 +27,24 @@ THE SOFTWARE.
 #include <piano.h>
 #include <waitress.h>
 
-#include "player.h"
 #include "settings.h"
 #include "ui_readline.h"
 
 typedef struct {
 	PianoHandle_t ph;
 	WaitressHandle_t waith;
-	player_t player;
 	BarSettings_t settings;
 	/* first item is current song */
 	PianoSong_t *playlist;
 	PianoSong_t *songHistory;
 	PianoStation_t *curStation;
-	char doQuit;
 	BarReadlineFds_t input;
 	unsigned int playerErrors;
+	pid_t playerPid;
+	bool paused, quit;
 } BarApp_t;
+
+#define BAR_NO_PLAYER (-1)
 
 #endif /* SRC_MAIN_H_4ZGSCG6X */
 

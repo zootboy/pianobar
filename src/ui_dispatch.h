@@ -87,10 +87,6 @@ static const BarUiDispatchAction_t dispatchActions[BAR_KS_COUNT] = {
 		{'$', BAR_DC_SONG, BarUiActDebug, NULL, "act_debug"},
 		{'b', BAR_DC_SONG, BarUiActBookmark, "bookmark song/artist",
 				"act_bookmark"},
-		{'(', BAR_DC_GLOBAL, BarUiActVolDown, "decrease volume",
-				"act_voldown"},
-		{')', BAR_DC_GLOBAL, BarUiActVolUp, "increase volume",
-				"act_volup"},
 		{'=', BAR_DC_STATION, BarUiActManageStation, "delete seeds/feedback",
 				"act_managestation"},
 		{' ', BAR_DC_GLOBAL | BAR_DC_STATION, BarUiActTogglePause, NULL,
@@ -101,8 +97,6 @@ static const BarUiDispatchAction_t dispatchActions[BAR_KS_COUNT] = {
 				"act_songplay"},
 		{'S', BAR_DC_GLOBAL | BAR_DC_STATION, BarUiActPause, "pause playback",
 				"act_songpause"},
-		{'^', BAR_DC_GLOBAL, BarUiActVolReset, "reset volume",
-				"act_volreset"},
 		};
 
 #include <piano.h>

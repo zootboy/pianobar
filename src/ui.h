@@ -30,7 +30,6 @@ THE SOFTWARE.
 #include <waitress.h>
 
 #include "settings.h"
-#include "player.h"
 #include "main.h"
 #include "ui_readline.h"
 #include "ui_types.h"
@@ -48,9 +47,10 @@ void BarUiPrintStation (const BarSettings_t *, PianoStation_t *);
 void BarUiPrintSong (const BarSettings_t *, const PianoSong_t *, 
 		const PianoStation_t *);
 size_t BarUiListSongs (const BarSettings_t *, const PianoSong_t *, const char *);
-void BarUiStartEventCmd (const BarSettings_t *, const char *,
-		const PianoStation_t *, const PianoSong_t *, const player_t *,
-		PianoStation_t *, PianoReturn_t, WaitressReturn_t);
+void BarUiStartEventCmd (const BarSettings_t * const settings,
+		const char * const type, const PianoStation_t * const curStation,
+		const PianoSong_t * const curSong, PianoStation_t * const stations,
+		const PianoReturn_t pRet, const WaitressReturn_t wRet);
 int BarUiPianoCall (BarApp_t * const, PianoRequestType_t,
 		void *, PianoReturn_t *, WaitressReturn_t *);
 void BarUiHistoryPrepend (BarApp_t *app, PianoSong_t *song);

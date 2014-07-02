@@ -57,9 +57,6 @@ BarUiActCallback(BarUiActQuit);
 BarUiActCallback(BarUiActDebug);
 BarUiActCallback(BarUiActHistory);
 BarUiActCallback(BarUiActBookmark);
-BarUiActCallback(BarUiActVolDown);
-BarUiActCallback(BarUiActVolUp);
 BarUiActCallback(BarUiActManageStation);
-BarUiActCallback(BarUiActVolReset);
 
 #endif /* SRC_UI_ACT_H_1FEFTC06 */

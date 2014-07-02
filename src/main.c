@@ -50,6 +50,7 @@ THE SOFTWARE.
 /* waitpid () */
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <errno.h>
 
 /* pandora.com library */
 #include <piano.h>
@@ -97,8 +98,8 @@ static bool BarMainLoginUser (BarApp_t *app) {
 
 	BarUiMsg (&app->settings, MSG_INFO, "Login... ");
 	ret = BarUiPianoCall (app, PIANO_REQUEST_LOGIN, &reqData, &pRet, &wRet);
-	BarUiStartEventCmd (&app->settings, "userlogin", NULL, NULL, &app->player,
-			NULL, pRet, wRet);
+	BarUiStartEventCmd (&app->settings, "userlogin", NULL, NULL, NULL, pRet,
+			wRet);
 	return ret;
 }
 
@@ -193,7 +194,7 @@ static bool BarMainGetStations (BarApp_t *app) {
 
 	BarUiMsg (&app->settings, MSG_INFO, "Get stations... ");
 	ret = BarUiPianoCall (app, PIANO_REQUEST_GET_STATIONS, NULL, &pRet, &wRet);
-	BarUiStartEventCmd (&app->settings, "usergetstations", NULL, NULL, &app->player,
+	BarUiStartEventCmd (&app->settings, "usergetstations", NULL, NULL,
 			app->ph.stations, pRet, wRet);
 	return ret;
 }
@@ -252,15 +253,13 @@ static void BarMainGetPlaylist (BarApp_t *app) {
 		}
 	}
 	BarUiStartEventCmd (&app->settings, "stationfetchplaylist",
-			app->curStation, app->playlist, &app->player, app->ph.stations,
-			pRet, wRet);
+			app->curStation, app->playlist, app->ph.stations, pRet, wRet);
 }
 
 /*	start new player thread
  */
-static void BarMainStartPlayback (BarApp_t *app, pthread_t *playerThread) {
+static bool BarMainStartPlayback (BarApp_t *app) {
 	assert (app != NULL);
-	assert (playerThread != NULL);
 
 	const PianoSong_t * const curSong = app->playlist;
 	assert (curSong != NULL);
@@ -274,86 +273,60 @@ static void BarMainStartPlayback (BarApp_t *app, pthread_t *playerThread) {
 	if (curSong->audioUrl == NULL ||
 			strncmp (curSong->audioUrl, httpPrefix, strlen (httpPrefix)) != 0) {
 		BarUiMsg (&app->settings, MSG_ERR, "Invalid song url.\n");
+		return false;
+	}
+
+	BarUiStartEventCmd (&app->settings, "songstart", app->curStation,
+			curSong, app->ph.stations, PIANO_RET_OK, WAITRESS_RET_OK);
+
+	const pid_t player = fork ();
+	assert (player != -1);
+	if (player == 0) {
+		/* child */
+		close (STDIN_FILENO);
+		char volopt[12+4];
+		snprintf (volopt, sizeof (volopt), "--af=volume=%.1f", curSong->fileGain);
+		const int ret = execlp ("mpv", "mpv", "--no-cache",
+				"--msglevel=all=error:statusline=status",
+				volopt, curSong->audioUrl, (char *) NULL);
+		assert (ret != -1);
+		return EXIT_FAILURE;
 	} else {
-		/* setup player */
-		memset (&app->player, 0, sizeof (app->player));
-
-		app->player.url = curSong->audioUrl;
-		app->player.gain = curSong->fileGain;
-		app->player.settings = &app->settings;
-		app->player.songDuration = curSong->length;
-		pthread_mutex_init (&app->player.pauseMutex, NULL);
-		pthread_cond_init (&app->player.pauseCond, NULL);
-
-		/* throw event */
-		BarUiStartEventCmd (&app->settings, "songstart",
-				app->curStation, curSong, &app->player, app->ph.stations,
-				PIANO_RET_OK, WAITRESS_RET_OK);
-
-		/* prevent race condition, mode must _not_ be DEAD if
-		 * thread has been started */
-		app->player.mode = PLAYER_STARTING;
-		/* start player */
-		pthread_create (playerThread, NULL, BarPlayerThread,
-				&app->player);
+		/* parent */
+		app->playerPid = player;
+		return true;
 	}
 }
 
-/*	player is done, clean up
- */
-static void BarMainPlayerCleanup (BarApp_t *app, pthread_t *playerThread) {
-	void *threadRet;
+static void BarMainFinishPlayback (BarApp_t * const app, const bool block) {
+	assert (app != NULL);
 
-	BarUiStartEventCmd (&app->settings, "songfinish", app->curStation,
-			app->playlist, &app->player, app->ph.stations, PIANO_RET_OK,
-			WAITRESS_RET_OK);
+	int status;
+	const pid_t finished = waitpid (app->playerPid, &status,
+			block ? 0 : WNOHANG);
+	assert (finished != -1);
+	if (finished == app->playerPid) {
+		app->playerPid = BAR_NO_PLAYER;
+		BarUiStartEventCmd (&app->settings, "songfinish", app->curStation,
+				app->playlist, app->ph.stations, PIANO_RET_OK,
+				WAITRESS_RET_OK);
 
-	/* FIXME: pthread_join blocks everything if network connection
-	 * is hung up e.g. */
-	pthread_join (*playerThread, &threadRet);
-	pthread_cond_destroy (&app->player.pauseCond);
-	pthread_mutex_destroy (&app->player.pauseMutex);
-
-	if (threadRet == (void *) PLAYER_RET_OK) {
-		app->playerErrors = 0;
-	} else if (threadRet == (void *) PLAYER_RET_SOFTFAIL) {
-		++app->playerErrors;
-		if (app->playerErrors >= app->settings.maxPlayerErrors) {
-			/* don't continue playback if thread reports too many error */
-			app->curStation = NULL;
+		if (WEXITSTATUS(status) == EXIT_SUCCESS) {
+			app->playerErrors = 0;
+		} else {
+			++app->playerErrors;
+			if (app->playerErrors >= app->settings.maxPlayerErrors) {
+				/* don't continue playback if thread reports too many
+				 * errors */
+				app->curStation = NULL;
+			}
 		}
-	} else {
-		app->curStation = NULL;
 	}
-
-	memset (&app->player, 0, sizeof (app->player));
-}
-
-/*	print song duration
- */
-static void BarMainPrintTime (BarApp_t *app) {
-	unsigned int songRemaining;
-	char sign;
-
-	if (app->player.songPlayed <= app->player.songDuration) {
-		songRemaining = app->player.songDuration - app->player.songPlayed;
-		sign = '-';
-	} else {
-		/* longer than expected */
-		songRemaining = app->player.songPlayed - app->player.songDuration;
-		sign = '+';
-	}
-	BarUiMsg (&app->settings, MSG_TIME, "%c%02u:%02u/%02u:%02u\r",
-			sign, songRemaining / 60, songRemaining % 60,
-			app->player.songDuration / 60,
-			app->player.songDuration % 60);
 }
 
 /*	main loop
  */
 static void BarMainLoop (BarApp_t *app) {
-	pthread_t playerThread;
-
 	if (!BarMainGetLoginCredentials (&app->settings, &app->input)) {
 		return;
 	}
@@ -370,22 +343,18 @@ static void BarMainLoop (BarApp_t *app) {
 
 	BarMainGetInitialStation (app);
 
-	/* little hack, needed to signal: hey! we need a playlist, but don't
-	 * free anything (there is nothing to be freed yet) */
-	memset (&app->player, 0, sizeof (app->player));
-
-	while (!app->doQuit) {
-		/* song finished playing, clean up things/scrobble song */
-		if (app->player.mode == PLAYER_FINISHED) {
-			BarMainPlayerCleanup (app, &playerThread);
+	while (!app->quit) {
+		/* player still alive? */
+		if (app->playerPid != BAR_NO_PLAYER) {
+			BarMainFinishPlayback (app, false);
 		}
 
 		/* check whether player finished playing and start playing new
 		 * song */
-		if (app->player.mode == PLAYER_DEAD && app->curStation != NULL) {
+		if (app->playerPid == BAR_NO_PLAYER && app->curStation != NULL) {
 			/* what's next? */
 			if (app->playlist != NULL) {
-				PianoSong_t *histsong = app->playlist;
+				PianoSong_t * const histsong = app->playlist;
 				app->playlist = PianoListNextP (app->playlist);
 				histsong->head.next = NULL;
 				BarUiHistoryPrepend (app, histsong);
@@ -395,20 +364,19 @@ static void BarMainLoop (BarApp_t *app) {
 			}
 			/* song ready to play */
 			if (app->playlist != NULL) {
-				BarMainStartPlayback (app, &playerThread);
+				if (!BarMainStartPlayback (app)) {
+					/* hard failure */
+					app->curStation = NULL;
+				}
 			}
 		}
 
 		BarMainHandleUserInput (app);
-
-		/* show time */
-		if (app->player.mode == PLAYER_PLAYING) {
-			BarMainPrintTime (app);
-		}
 	}
 
-	if (app->player.mode != PLAYER_DEAD) {
-		pthread_join (playerThread, NULL);
+	if (app->playerPid != BAR_NO_PLAYER) {
+		kill (app->playerPid, SIGTERM);
+		BarMainFinishPlayback (app, true);
 	}
 }
 
@@ -416,6 +384,7 @@ int main (int argc, char **argv) {
 	static BarApp_t app;
 
 	memset (&app, 0, sizeof (app));
+	app.playerPid = BAR_NO_PLAYER;
 
 	/* save terminal attributes, before disabling echoing */
 	BarTermInit ();
@@ -428,7 +397,6 @@ int main (int argc, char **argv) {
 	gcry_control (GCRYCTL_DISABLE_SECMEM, 0);
 	gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
 	gnutls_global_init ();
-	BarPlayerInit ();
 
 	BarSettingsInit (&app.settings);
 	BarSettingsRead (&app.settings);
@@ -497,7 +465,6 @@ int main (int argc, char **argv) {
 	PianoDestroyPlaylist (app.songHistory);
 	PianoDestroyPlaylist (app.playlist);
 	WaitressFree (&app.waith);
-	BarPlayerDestroy ();
 	gnutls_global_deinit ();
 	BarSettingsDestroy (&app.settings);
 
