@@ -42,7 +42,6 @@ THE SOFTWARE.
 #include <fcntl.h>
 /* tcset/getattr () */
 #include <termios.h>
-#include <pthread.h>
 #include <assert.h>
 #include <stdbool.h>
 #include <limits.h>
@@ -256,7 +255,7 @@ static void BarMainGetPlaylist (BarApp_t *app) {
 			app->curStation, app->playlist, app->ph.stations, pRet, wRet);
 }
 
-/*	start new player thread
+/*	start new player
  */
 static bool BarMainStartPlayback (BarApp_t *app) {
 	assert (app != NULL);
@@ -279,20 +278,31 @@ static bool BarMainStartPlayback (BarApp_t *app) {
 	BarUiStartEventCmd (&app->settings, "songstart", app->curStation,
 			curSong, app->ph.stations, PIANO_RET_OK, WAITRESS_RET_OK);
 
+	int pipefd[2];
+	int ret = pipe (pipefd);
+	assert (ret != -1);
 	const pid_t player = fork ();
 	assert (player != -1);
 	if (player == 0) {
 		/* child */
-		close (STDIN_FILENO);
-		char volopt[12+4];
-		snprintf (volopt, sizeof (volopt), "--af=volume=%.1f", curSong->fileGain);
-		const int ret = execlp ("mpv", "mpv", "--no-cache",
+		/* close write end */
+		close (pipefd[1]);
+		/* connect stdin to read-end of pipe */
+		ret = dup2 (pipefd[0], STDIN_FILENO);
+		assert (ret != -1);
+
+		char volopt[12+6+1];
+		snprintf (volopt, sizeof (volopt), "--af=volume=%.2f", curSong->fileGain);
+		const int ret = execlp ("mpv", "mpv",
 				"--msglevel=all=error:statusline=status",
 				volopt, curSong->audioUrl, (char *) NULL);
 		assert (ret != -1);
 		return EXIT_FAILURE;
 	} else {
 		/* parent */
+		/* close read end */
+		close (pipefd[0]);
+		app->playerStdin = pipefd[1];
 		app->playerPid = player;
 		return true;
 	}
@@ -306,6 +316,8 @@ static void BarMainFinishPlayback (BarApp_t * const app, const bool block) {
 			block ? 0 : WNOHANG);
 	assert (finished != -1);
 	if (finished == app->playerPid) {
+		close (app->playerStdin);
+		app->playerStdin = -1;
 		app->playerPid = BAR_NO_PLAYER;
 		BarUiStartEventCmd (&app->settings, "songfinish", app->curStation,
 				app->playlist, app->ph.stations, PIANO_RET_OK,
@@ -316,7 +328,7 @@ static void BarMainFinishPlayback (BarApp_t * const app, const bool block) {
 		} else {
 			++app->playerErrors;
 			if (app->playerErrors >= app->settings.maxPlayerErrors) {
-				/* don't continue playback if thread reports too many
+				/* don't continue playback if player reports too many
 				 * errors */
 				app->curStation = NULL;
 			}
@@ -385,6 +397,7 @@ int main (int argc, char **argv) {
 
 	memset (&app, 0, sizeof (app));
 	app.playerPid = BAR_NO_PLAYER;
+	app.playerStdin = -1;
 
 	/* save terminal attributes, before disabling echoing */
 	BarTermInit ();

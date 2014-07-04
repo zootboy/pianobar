@@ -25,10 +25,8 @@ THE SOFTWARE.
 
 #include <string.h>
 #include <unistd.h>
-#include <pthread.h>
 #include <assert.h>
 #include <sys/types.h>
-#include <signal.h>
 
 #include "ui.h"
 #include "ui_readline.h"
@@ -47,7 +45,8 @@ THE SOFTWARE.
 
 static void skipSong (const BarApp_t * const app) {
 	assert (app->playerPid != BAR_NO_PLAYER);
-	kill (app->playerPid, SIGTERM);
+	assert (app->playerStdin != -1);
+	write (app->playerStdin, "q", 1);
 }
 
 /*	transform station if necessary to allow changes like rename, rate, ...
@@ -406,7 +405,8 @@ BarUiActCallback(BarUiActSkipSong) {
 BarUiActCallback(BarUiActPlay) {
 	assert (app->playerPid != BAR_NO_PLAYER);
 	if (app->paused) {
-		kill (app->playerPid, SIGCONT);
+		assert (app->playerStdin != -1);
+		write (app->playerStdin, " ", 1);
 		app->paused = false;
 	}
 }
@@ -416,7 +416,8 @@ BarUiActCallback(BarUiActPlay) {
 BarUiActCallback(BarUiActPause) {
 	assert (app->playerPid != BAR_NO_PLAYER);
 	if (!app->paused) {
-		kill (app->playerPid, SIGSTOP);
+		assert (app->playerStdin != -1);
+		write (app->playerStdin, " ", 1);
 		app->paused = true;
 	}
 }
@@ -425,11 +426,8 @@ BarUiActCallback(BarUiActPause) {
  */
 BarUiActCallback(BarUiActTogglePause) {
 	assert (app->playerPid != BAR_NO_PLAYER);
-	if (app->paused) {
-		kill (app->playerPid, SIGCONT);
-	} else {
-		kill (app->playerPid, SIGSTOP);
-	}
+	assert (app->playerStdin != -1);
+	write (app->playerStdin, " ", 1);
 	app->paused = !app->paused;
 }
 
