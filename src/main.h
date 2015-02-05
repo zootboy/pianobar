@@ -41,7 +41,7 @@ typedef struct {
 	BarReadlineFds_t input;
 	unsigned int playerErrors;
 	pid_t playerPid;
-	int playerStdin;
+	int playerStdin, playerStdout, playerStderr;
 	bool paused, quit;
 } BarApp_t;
 

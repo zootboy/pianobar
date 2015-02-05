@@ -220,14 +220,58 @@ static void BarMainGetInitialStation (BarApp_t *app) {
 	}
 }
 
+#define max(a,b) ((a) > (b) ? (a) : (b))
+
 /*	wait for user input
  */
 static void BarMainHandleUserInput (BarApp_t *app) {
-	char buf[2];
-	if (BarReadline (buf, sizeof (buf), NULL, &app->input,
-			BAR_RL_FULLRETURN | BAR_RL_NOECHO, 1) > 0) {
-		BarUiDispatch (app, buf[0], app->curStation, app->playlist, true,
-				BAR_DC_GLOBAL);
+	const BarReadlineFds_t * const input = &app->input;
+	fd_set set;
+	memcpy (&set, &input->set, sizeof (set));
+	FD_SET(app->playerStdout, &set);
+	FD_SET(app->playerStderr, &set);
+	const int maxfd = max (max (input->maxfd, app->playerStdout),
+			app->playerStderr) + 1;
+
+	while (true) {
+		fd_set tmpset;
+		memcpy (&tmpset, &set, sizeof (tmpset));
+		int ret = select (maxfd, &tmpset, NULL, NULL, NULL);
+		assert (ret > 0);
+
+		if (FD_ISSET(app->playerStdout, &tmpset)) {
+			char buf[1024];
+			ret = read (app->playerStdout, buf, sizeof (buf)-1);
+			if (ret == 0) {
+				/* player quit */
+				break;
+			}
+			assert (ret != -1);
+			buf[ret] = '\0';
+			BarUiMsg (&app->settings, MSG_TIME, "%s", buf);
+		} else if (FD_ISSET(app->playerStderr, &tmpset)) {
+			char buf[1024];
+			ret = read (app->playerStderr, buf, sizeof (buf)-1);
+			if (ret == 0) {
+				/* player quit */
+				break;
+			}
+			assert (ret != -1);
+			buf[ret] = '\0';
+			BarUiMsg (&app->settings, MSG_TIME, "%s", buf);
+		} else {
+			int fd = -1;
+			if (FD_ISSET(input->fds[0], &tmpset)) {
+				fd = input->fds[0];
+			} else if (FD_ISSET(input->fds[1], &tmpset)) {
+				fd = input->fds[1];
+			}
+			char buf = 0;
+			ret = read (fd, &buf, sizeof (buf));
+			assert (ret != -1);
+			BarUiDispatch (app, buf, app->curStation, app->playlist, true,
+					BAR_DC_GLOBAL);
+		}
 	}
 }
 
@@ -278,17 +322,29 @@ static bool BarMainStartPlayback (BarApp_t *app) {
 	BarUiStartEventCmd (&app->settings, "songstart", app->curStation,
 			curSong, app->ph.stations, PIANO_RET_OK, WAITRESS_RET_OK);
 
-	int pipefd[2];
-	int ret = pipe (pipefd);
+	int stdinpipe[2], stdoutpipe[2], stderrpipe[2];
+	int ret = pipe (stdinpipe);
+	assert (ret != -1);
+	ret = pipe (stdoutpipe);
+	assert (ret != -1);
+	ret = pipe (stderrpipe);
 	assert (ret != -1);
 	const pid_t player = fork ();
 	assert (player != -1);
 	if (player == 0) {
 		/* child */
 		/* close write end */
-		close (pipefd[1]);
+		close (stdinpipe[1]);
+		/* close read end */
+		close (stdoutpipe[0]);
+		close (stderrpipe[0]);
 		/* connect stdin to read-end of pipe */
-		ret = dup2 (pipefd[0], STDIN_FILENO);
+		ret = dup2 (stdinpipe[0], STDIN_FILENO);
+		assert (ret != -1);
+		/* and stdout to write-end of pipe */
+		ret = dup2 (stdoutpipe[1], STDOUT_FILENO);
+		assert (ret != -1);
+		ret = dup2 (stderrpipe[1], STDERR_FILENO);
 		assert (ret != -1);
 
 		char volopt[12+6+1];
@@ -301,19 +357,24 @@ static bool BarMainStartPlayback (BarApp_t *app) {
 	} else {
 		/* parent */
 		/* close read end */
-		close (pipefd[0]);
-		app->playerStdin = pipefd[1];
+		close (stdinpipe[0]);
+		/* close write end */
+		close (stdoutpipe[1]);
+		close (stderrpipe[1]);
+
+		app->playerStdin = stdinpipe[1];
+		app->playerStdout = stdoutpipe[0];
+		app->playerStderr = stderrpipe[0];
 		app->playerPid = player;
 		return true;
 	}
 }
 
-static void BarMainFinishPlayback (BarApp_t * const app, const bool block) {
+static void BarMainFinishPlayback (BarApp_t * const app) {
 	assert (app != NULL);
 
 	int status;
-	const pid_t finished = waitpid (app->playerPid, &status,
-			block ? 0 : WNOHANG);
+	const pid_t finished = waitpid (app->playerPid, &status, 0);
 	assert (finished != -1);
 	if (finished == app->playerPid) {
 		close (app->playerStdin);
@@ -356,14 +417,8 @@ static void BarMainLoop (BarApp_t *app) {
 	BarMainGetInitialStation (app);
 
 	while (!app->quit) {
-		/* player still alive? */
-		if (app->playerPid != BAR_NO_PLAYER) {
-			BarMainFinishPlayback (app, false);
-		}
-
-		/* check whether player finished playing and start playing new
-		 * song */
-		if (app->playerPid == BAR_NO_PLAYER && app->curStation != NULL) {
+		/* start next song */
+		if (app->curStation != NULL) {
 			/* what's next? */
 			if (app->playlist != NULL) {
 				PianoSong_t * const histsong = app->playlist;
@@ -384,11 +439,8 @@ static void BarMainLoop (BarApp_t *app) {
 		}
 
 		BarMainHandleUserInput (app);
-	}
 
-	if (app->playerPid != BAR_NO_PLAYER) {
-		kill (app->playerPid, SIGTERM);
-		BarMainFinishPlayback (app, true);
+		BarMainFinishPlayback (app);
 	}
 }
 
@@ -461,8 +513,7 @@ int main (int argc, char **argv) {
 					app.settings.fifo);
 		}
 	}
-	app.input.maxfd = app.input.fds[0] > app.input.fds[1] ? app.input.fds[0] :
-			app.input.fds[1];
+	app.input.maxfd = max (app.input.fds[0], app.input.fds[1]);
 	++app.input.maxfd;
 
 	BarMainLoop (&app);
