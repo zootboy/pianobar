@@ -269,8 +269,13 @@ static void BarMainHandleUserInput (BarApp_t *app) {
 			char buf = 0;
 			ret = read (fd, &buf, sizeof (buf));
 			assert (ret != -1);
-			BarUiDispatch (app, buf, app->curStation, app->playlist, true,
-					BAR_DC_GLOBAL);
+			const BarKeyShortcutId_t key = BarUiDispatch (app, buf,
+					app->curStation, app->playlist, true, BAR_DC_GLOBAL);
+			if (key == BAR_KS_COUNT) {
+				/* redirect all unknown keys to player */
+				ret = write (app->playerStdin, &buf, sizeof (buf));
+				assert (ret != -1);
+			}
 		}
 	}
 }

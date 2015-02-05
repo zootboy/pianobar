@@ -71,8 +71,6 @@ static const BarUiDispatchAction_t dispatchActions[BAR_KS_COUNT] = {
 				"act_addshared"},
 		{'n', BAR_DC_GLOBAL | BAR_DC_STATION, BarUiActSkipSong, "next song",
 				"act_songnext"},
-		{'p', BAR_DC_GLOBAL | BAR_DC_STATION, BarUiActTogglePause, "pause/resume playback",
-				"act_songpausetoggle"},
 		{'q', BAR_DC_GLOBAL, BarUiActQuit, "quit", "act_quit"},
 		{'r', BAR_DC_STATION, BarUiActRenameStation, "rename station",
 				"act_stationrename"},
@@ -89,14 +87,8 @@ static const BarUiDispatchAction_t dispatchActions[BAR_KS_COUNT] = {
 				"act_bookmark"},
 		{'=', BAR_DC_STATION, BarUiActManageStation, "delete seeds/feedback",
 				"act_managestation"},
-		{' ', BAR_DC_GLOBAL | BAR_DC_STATION, BarUiActTogglePause, NULL,
-				"act_songpausetoggle2"},
 		{'v', BAR_DC_SONG, BarUiActCreateStationFromSong,
 				"create new station from song or artist", "act_stationcreatefromsong"},
-		{'P', BAR_DC_GLOBAL | BAR_DC_STATION, BarUiActPlay, "resume playback",
-				"act_songplay"},
-		{'S', BAR_DC_GLOBAL | BAR_DC_STATION, BarUiActPause, "pause playback",
-				"act_songpause"},
 		};
 
 #include <piano.h>

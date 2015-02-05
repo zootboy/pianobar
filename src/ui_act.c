@@ -27,6 +27,8 @@ THE SOFTWARE.
 #include <unistd.h>
 #include <assert.h>
 #include <sys/types.h>
+#include <sys/types.h>
+#include <signal.h>
 
 #include "ui.h"
 #include "ui_readline.h"
@@ -45,8 +47,7 @@ THE SOFTWARE.
 
 static void skipSong (const BarApp_t * const app) {
 	assert (app->playerPid != BAR_NO_PLAYER);
-	assert (app->playerStdin != -1);
-	write (app->playerStdin, "q", 1);
+	kill (app->playerPid, SIGTERM);
 }
 
 /*	transform station if necessary to allow changes like rename, rate, ...
@@ -400,37 +401,6 @@ BarUiActCallback(BarUiActSkipSong) {
 	skipSong (app);
 }
 
-/*	play
- */
-BarUiActCallback(BarUiActPlay) {
-	assert (app->playerPid != BAR_NO_PLAYER);
-	if (app->paused) {
-		assert (app->playerStdin != -1);
-		write (app->playerStdin, " ", 1);
-		app->paused = false;
-	}
-}
-
-/*	pause
- */
-BarUiActCallback(BarUiActPause) {
-	assert (app->playerPid != BAR_NO_PLAYER);
-	if (!app->paused) {
-		assert (app->playerStdin != -1);
-		write (app->playerStdin, " ", 1);
-		app->paused = true;
-	}
-}
-
-/*	toggle pause
- */
-BarUiActCallback(BarUiActTogglePause) {
-	assert (app->playerPid != BAR_NO_PLAYER);
-	assert (app->playerStdin != -1);
-	write (app->playerStdin, " ", 1);
-	app->paused = !app->paused;
-}
-
 /*	rename current station
  */
 BarUiActCallback(BarUiActRenameStation) {
@@ -569,6 +539,7 @@ BarUiActCallback(BarUiActSelectQuickMix) {
  */
 BarUiActCallback(BarUiActQuit) {
 	app->quit = true;
+	skipSong (app);
 }
 
 /*	song history
