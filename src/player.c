@@ -96,7 +96,8 @@ bool BarPlayerPlay (BarPlayer * const player, const PianoSong_t * const song) {
 		player->stdin = stdinpipe[1];
 		player->stdout = stdoutpipe[0];
 		player->stderr = stderrpipe[0];
-		player->songDuration = player->songPlayed = 0;
+		player->songDuration = song->length;
+		player->songPlayed = 0;
 		player->pid = pid;
 		return true;
 	}

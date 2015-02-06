@@ -685,7 +685,9 @@ size_t BarUiListSongs (const BarSettings_t *settings,
  */
 void BarUiStartEventCmd (const BarSettings_t * const settings,
 		const char * const type, const PianoStation_t * const curStation,
-		const PianoSong_t * const curSong, PianoStation_t * const stations,
+		const PianoSong_t * const curSong,
+		const BarPlayer * const player,
+		PianoStation_t * const stations,
 		const PianoReturn_t pRet, const WaitressReturn_t wRet) {
 	pid_t chld;
 	int pipeFd[2];
@@ -737,6 +739,7 @@ void BarUiStartEventCmd (const BarSettings_t * const settings,
 				"wRet=%i\n"
 				"wRetStr=%s\n"
 				"songDuration=%u\n"
+				"songPlayed=%u\n"
 				"rating=%i\n"
 				"detailUrl=%s\n",
 				curSong == NULL ? "" : curSong->artist,
@@ -749,7 +752,8 @@ void BarUiStartEventCmd (const BarSettings_t * const settings,
 				PianoErrorToStr (pRet),
 				wRet,
 				WaitressErrorToStr (wRet),
-				curSong->length,
+				player == NULL ? 0 : player->songDuration,
+				player == NULL ? 0 : player->songPlayed,
 				curSong == NULL ? PIANO_RATE_NONE : curSong->rating,
 				curSong == NULL ? "" : curSong->detailUrl
 				);

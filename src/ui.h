@@ -49,7 +49,9 @@ void BarUiPrintSong (const BarSettings_t *, const PianoSong_t *,
 size_t BarUiListSongs (const BarSettings_t *, const PianoSong_t *, const char *);
 void BarUiStartEventCmd (const BarSettings_t * const settings,
 		const char * const type, const PianoStation_t * const curStation,
-		const PianoSong_t * const curSong, PianoStation_t * const stations,
+		const PianoSong_t * const curSong,
+		const BarPlayer * const player,
+		PianoStation_t * const stations,
 		const PianoReturn_t pRet, const WaitressReturn_t wRet);
 int BarUiPianoCall (BarApp_t * const, PianoRequestType_t,
 		void *, PianoReturn_t *, WaitressReturn_t *);

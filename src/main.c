@@ -97,8 +97,8 @@ static bool BarMainLoginUser (BarApp_t *app) {
 
 	BarUiMsg (&app->settings, MSG_INFO, "Login... ");
 	ret = BarUiPianoCall (app, PIANO_REQUEST_LOGIN, &reqData, &pRet, &wRet);
-	BarUiStartEventCmd (&app->settings, "userlogin", NULL, NULL, NULL, pRet,
-			wRet);
+	BarUiStartEventCmd (&app->settings, "userlogin", NULL, NULL, NULL, NULL,
+			pRet, wRet);
 	return ret;
 }
 
@@ -193,7 +193,7 @@ static bool BarMainGetStations (BarApp_t *app) {
 
 	BarUiMsg (&app->settings, MSG_INFO, "Get stations... ");
 	ret = BarUiPianoCall (app, PIANO_REQUEST_GET_STATIONS, NULL, &pRet, &wRet);
-	BarUiStartEventCmd (&app->settings, "usergetstations", NULL, NULL,
+	BarUiStartEventCmd (&app->settings, "usergetstations", NULL, NULL, NULL,
 			app->ph.stations, pRet, wRet);
 	return ret;
 }
@@ -311,7 +311,8 @@ static void BarMainGetPlaylist (BarApp_t *app) {
 		}
 	}
 	BarUiStartEventCmd (&app->settings, "stationfetchplaylist",
-			app->curStation, app->playlist, app->ph.stations, pRet, wRet);
+			app->curStation, app->playlist, &app->player, app->ph.stations,
+			pRet, wRet);
 }
 
 /*	start new player
@@ -332,7 +333,8 @@ static bool BarMainStartPlayback (BarApp_t *app) {
 	}
 
 	BarUiStartEventCmd (&app->settings, "songstart", app->curStation,
-			curSong, app->ph.stations, PIANO_RET_OK, WAITRESS_RET_OK);
+			curSong, &app->player, app->ph.stations, PIANO_RET_OK,
+			WAITRESS_RET_OK);
 
 	return true;
 }
@@ -348,7 +350,7 @@ static void BarMainFinishPlayback (BarApp_t * const app) {
 	}
 
 	BarUiStartEventCmd (&app->settings, "songfinish", app->curStation,
-			app->playlist, app->ph.stations, PIANO_RET_OK,
+			app->playlist, &app->player, app->ph.stations, PIANO_RET_OK,
 			WAITRESS_RET_OK);
 }
 
