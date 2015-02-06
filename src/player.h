@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2008-2011
+Copyright (c) 2015
 	Lars-Dominik Braun <lars@6xq.net>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -21,28 +21,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 */
 
-#ifndef SRC_MAIN_H_4ZGSCG6X
-#define SRC_MAIN_H_4ZGSCG6X
+#pragma once
 
-#include <piano.h>
-#include <waitress.h>
-
-#include "settings.h"
-#include "ui_readline.h"
-#include "player.h"
+#define BAR_NO_PLAYER (-1)
 
 typedef struct {
-	PianoHandle_t ph;
-	WaitressHandle_t waith;
-	BarSettings_t settings;
-	/* first item is current song */
-	PianoSong_t *playlist;
-	PianoSong_t *songHistory;
-	PianoStation_t *curStation;
-	BarReadlineFds_t input;
-	BarPlayer player;
-	bool quit;
-} BarApp_t;
+	unsigned int errors;
+	pid_t pid;
+	int stdin, stdout, stderr;
+	unsigned int songPlayed, songDuration;
+} BarPlayer;
 
-#endif /* SRC_MAIN_H_4ZGSCG6X */
+void BarPlayerInit (BarPlayer * const player);
+bool BarPlayerPlay (BarPlayer * const player, const PianoSong_t * const song);
+void BarPlayerCleanup (BarPlayer * const player);
+void BarPlayerSkip (BarPlayer * const player);
+bool BarPlayerIO (BarPlayer * const player, const int fd);
 

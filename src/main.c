@@ -220,6 +220,26 @@ static void BarMainGetInitialStation (BarApp_t *app) {
 	}
 }
 
+/*	print song duration
+ */
+static void BarMainPrintTime (BarApp_t * const app) {
+	unsigned int songRemaining;
+	char sign;
+
+	if (app->player.songPlayed <= app->player.songDuration) {
+		songRemaining = app->player.songDuration - app->player.songPlayed;
+		sign = '-';
+	} else {
+		/* longer than expected */
+		songRemaining = app->player.songPlayed - app->player.songDuration;
+		sign = '+';
+	}
+	BarUiMsg (&app->settings, MSG_TIME, "%c%02u:%02u/%02u:%02u\r",
+			sign, songRemaining / 60, songRemaining % 60,
+			app->player.songDuration / 60,
+			app->player.songDuration % 60);
+}
+
 #define max(a,b) ((a) > (b) ? (a) : (b))
 
 /*	wait for user input
@@ -228,10 +248,10 @@ static void BarMainHandleUserInput (BarApp_t *app) {
 	const BarReadlineFds_t * const input = &app->input;
 	fd_set set;
 	memcpy (&set, &input->set, sizeof (set));
-	FD_SET(app->playerStdout, &set);
-	FD_SET(app->playerStderr, &set);
-	const int maxfd = max (max (input->maxfd, app->playerStdout),
-			app->playerStderr) + 1;
+	FD_SET(app->player.stdout, &set);
+	FD_SET(app->player.stderr, &set);
+	const int maxfd = max (max (input->maxfd, app->player.stdout),
+			app->player.stderr) + 1;
 
 	while (true) {
 		fd_set tmpset;
@@ -239,26 +259,16 @@ static void BarMainHandleUserInput (BarApp_t *app) {
 		int ret = select (maxfd, &tmpset, NULL, NULL, NULL);
 		assert (ret > 0);
 
-		if (FD_ISSET(app->playerStdout, &tmpset)) {
-			char buf[1024];
-			ret = read (app->playerStdout, buf, sizeof (buf)-1);
-			if (ret == 0) {
-				/* player quit */
+		if (FD_ISSET(app->player.stdout, &tmpset)) {
+			if (!BarPlayerIO (&app->player, app->player.stdout)) {
 				break;
 			}
-			assert (ret != -1);
-			buf[ret] = '\0';
-			BarUiMsg (&app->settings, MSG_TIME, "%s", buf);
-		} else if (FD_ISSET(app->playerStderr, &tmpset)) {
-			char buf[1024];
-			ret = read (app->playerStderr, buf, sizeof (buf)-1);
-			if (ret == 0) {
-				/* player quit */
+			BarMainPrintTime (app);
+		} else if (FD_ISSET(app->player.stderr, &tmpset)) {
+			if (!BarPlayerIO (&app->player, app->player.stderr)) {
 				break;
 			}
-			assert (ret != -1);
-			buf[ret] = '\0';
-			BarUiMsg (&app->settings, MSG_TIME, "%s", buf);
+			BarMainPrintTime (app);
 		} else {
 			int fd = -1;
 			if (FD_ISSET(input->fds[0], &tmpset)) {
@@ -272,8 +282,8 @@ static void BarMainHandleUserInput (BarApp_t *app) {
 			const BarKeyShortcutId_t key = BarUiDispatch (app, buf,
 					app->curStation, app->playlist, true, BAR_DC_GLOBAL);
 			if (key == BAR_KS_COUNT) {
-				/* redirect all unknown keys to player */
-				ret = write (app->playerStdin, &buf, sizeof (buf));
+				/* redirect unknown keys to player */
+				ret = write (app->player.stdin, &buf, sizeof (buf));
 				assert (ret != -1);
 			}
 		}
@@ -316,90 +326,30 @@ static bool BarMainStartPlayback (BarApp_t *app) {
 			PianoFindStationById (app->ph.stations,
 			curSong->stationId) : NULL);
 
-	static const char httpPrefix[] = "http://";
-	/* avoid playing local files */
-	if (curSong->audioUrl == NULL ||
-			strncmp (curSong->audioUrl, httpPrefix, strlen (httpPrefix)) != 0) {
-		BarUiMsg (&app->settings, MSG_ERR, "Invalid song url.\n");
+	if (!BarPlayerPlay (&app->player, curSong)) {
+		BarUiMsg (&app->settings, MSG_ERR, "Cannot start player.\n");
 		return false;
 	}
 
 	BarUiStartEventCmd (&app->settings, "songstart", app->curStation,
 			curSong, app->ph.stations, PIANO_RET_OK, WAITRESS_RET_OK);
 
-	int stdinpipe[2], stdoutpipe[2], stderrpipe[2];
-	int ret = pipe (stdinpipe);
-	assert (ret != -1);
-	ret = pipe (stdoutpipe);
-	assert (ret != -1);
-	ret = pipe (stderrpipe);
-	assert (ret != -1);
-	const pid_t player = fork ();
-	assert (player != -1);
-	if (player == 0) {
-		/* child */
-		/* close write end */
-		close (stdinpipe[1]);
-		/* close read end */
-		close (stdoutpipe[0]);
-		close (stderrpipe[0]);
-		/* connect stdin to read-end of pipe */
-		ret = dup2 (stdinpipe[0], STDIN_FILENO);
-		assert (ret != -1);
-		/* and stdout to write-end of pipe */
-		ret = dup2 (stdoutpipe[1], STDOUT_FILENO);
-		assert (ret != -1);
-		ret = dup2 (stderrpipe[1], STDERR_FILENO);
-		assert (ret != -1);
-
-		char volopt[12+6+1];
-		snprintf (volopt, sizeof (volopt), "--af=volume=%.2f", curSong->fileGain);
-		const int ret = execlp ("mpv", "mpv",
-				"--msglevel=all=error:statusline=status",
-				volopt, curSong->audioUrl, (char *) NULL);
-		assert (ret != -1);
-		return EXIT_FAILURE;
-	} else {
-		/* parent */
-		/* close read end */
-		close (stdinpipe[0]);
-		/* close write end */
-		close (stdoutpipe[1]);
-		close (stderrpipe[1]);
-
-		app->playerStdin = stdinpipe[1];
-		app->playerStdout = stdoutpipe[0];
-		app->playerStderr = stderrpipe[0];
-		app->playerPid = player;
-		return true;
-	}
+	return true;
 }
 
 static void BarMainFinishPlayback (BarApp_t * const app) {
 	assert (app != NULL);
 
-	int status;
-	const pid_t finished = waitpid (app->playerPid, &status, 0);
-	assert (finished != -1);
-	if (finished == app->playerPid) {
-		close (app->playerStdin);
-		app->playerStdin = -1;
-		app->playerPid = BAR_NO_PLAYER;
-		BarUiStartEventCmd (&app->settings, "songfinish", app->curStation,
-				app->playlist, app->ph.stations, PIANO_RET_OK,
-				WAITRESS_RET_OK);
-
-		if (WEXITSTATUS(status) == EXIT_SUCCESS) {
-			app->playerErrors = 0;
-		} else {
-			++app->playerErrors;
-			if (app->playerErrors >= app->settings.maxPlayerErrors) {
-				/* don't continue playback if player reports too many
-				 * errors */
-				app->curStation = NULL;
-			}
-		}
+	BarPlayerCleanup (&app->player);
+	if (app->player.errors >= app->settings.maxPlayerErrors) {
+		/* don't continue playback if player reports too many
+		 * errors */
+		app->curStation = NULL;
 	}
+
+	BarUiStartEventCmd (&app->settings, "songfinish", app->curStation,
+			app->playlist, app->ph.stations, PIANO_RET_OK,
+			WAITRESS_RET_OK);
 }
 
 /*	main loop
@@ -453,8 +403,6 @@ int main (int argc, char **argv) {
 	static BarApp_t app;
 
 	memset (&app, 0, sizeof (app));
-	app.playerPid = BAR_NO_PLAYER;
-	app.playerStdin = -1;
 
 	/* save terminal attributes, before disabling echoing */
 	BarTermInit ();
@@ -468,6 +416,7 @@ int main (int argc, char **argv) {
 	gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
 	gnutls_global_init ();
 
+	BarPlayerInit (&app.player);
 	BarSettingsInit (&app.settings);
 	BarSettingsRead (&app.settings);
 
@@ -490,6 +439,11 @@ int main (int argc, char **argv) {
 				app.settings.keys[BAR_KS_HELP]);
 	}
 
+	if (app.settings.playerCommand == NULL) {
+		BarUiMsg (&app.settings, MSG_ERR, "No audio player selected. Please set "
+				"player_command in your config file.");
+	}
+
 	WaitressInit (&app.waith);
 	app.waith.url.host = app.settings.rpcHost;
 	app.waith.url.tlsPort = app.settings.rpcTlsPort;
@@ -509,7 +463,8 @@ int main (int argc, char **argv) {
 		/* check for file type, must be fifo */
 		fstat (app.input.fds[1], &s);
 		if (!S_ISFIFO (s.st_mode)) {
-			BarUiMsg (&app.settings, MSG_ERR, "File at %s is not a fifo\n", app.settings.fifo);
+			BarUiMsg (&app.settings, MSG_ERR, "File at %s is not a fifo\n",
+					app.settings.fifo);
 			close (app.input.fds[1]);
 			app.input.fds[1] = -1;
 		} else {

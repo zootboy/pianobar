@@ -26,9 +26,6 @@ THE SOFTWARE.
 #include <string.h>
 #include <unistd.h>
 #include <assert.h>
-#include <sys/types.h>
-#include <sys/types.h>
-#include <signal.h>
 
 #include "ui.h"
 #include "ui_readline.h"
@@ -44,11 +41,6 @@ THE SOFTWARE.
  */
 #define BarUiActDefaultPianoCall(call, arg) BarUiPianoCall (app, \
 		call, arg, &pRet, &wRet)
-
-static void skipSong (const BarApp_t * const app) {
-	assert (app->playerPid != BAR_NO_PLAYER);
-	kill (app->playerPid, SIGTERM);
-}
 
 /*	transform station if necessary to allow changes like rename, rate, ...
  *	@param piano handle
@@ -139,7 +131,7 @@ BarUiActCallback(BarUiActBanSong) {
 	BarUiMsg (&app->settings, MSG_INFO, "Banning song... ");
 	if (BarUiActDefaultPianoCall (PIANO_REQUEST_RATE_SONG, &reqData) &&
 			selSong == app->playlist) {
-		skipSong (app);
+		BarPlayerSkip (&app->player);
 	}
 	BarUiActDefaultEventcmd ("songban");
 }
@@ -226,7 +218,7 @@ BarUiActCallback(BarUiActDeleteStation) {
 		BarUiMsg (&app->settings, MSG_INFO, "Deleting station... ");
 		if (BarUiActDefaultPianoCall (PIANO_REQUEST_DELETE_STATION,
 				selStation) && selStation == app->curStation) {
-			skipSong (app);
+			BarPlayerSkip (&app->player);
 			PianoDestroyPlaylist (PianoListNextP (app->playlist));
 			app->playlist->head.next = NULL;
 			BarUiHistoryPrepend (app, app->playlist);
@@ -398,7 +390,7 @@ BarUiActCallback(BarUiActLoveSong) {
 /*	skip song
  */
 BarUiActCallback(BarUiActSkipSong) {
-	skipSong (app);
+	BarPlayerSkip (&app->player);
 }
 
 /*	rename current station
@@ -434,7 +426,7 @@ BarUiActCallback(BarUiActSelectStation) {
 	if (newStation != NULL) {
 		app->curStation = newStation;
 		BarUiPrintStation (&app->settings, app->curStation);
-		skipSong (app);
+		BarPlayerSkip (&app->player);
 		if (app->playlist != NULL) {
 			PianoDestroyPlaylist (PianoListNextP (app->playlist));
 			app->playlist->head.next = NULL;
@@ -455,7 +447,7 @@ BarUiActCallback(BarUiActTempBanSong) {
 	BarUiMsg (&app->settings, MSG_INFO, "Putting song on shelf... ");
 	if (BarUiActDefaultPianoCall (PIANO_REQUEST_ADD_TIRED_SONG, selSong) &&
 			selSong == app->playlist) {
-		skipSong (app);
+		BarPlayerSkip (&app->player);
 	}
 	BarUiActDefaultEventcmd ("songshelf");
 }
@@ -539,7 +531,7 @@ BarUiActCallback(BarUiActSelectQuickMix) {
  */
 BarUiActCallback(BarUiActQuit) {
 	app->quit = true;
-	skipSong (app);
+	BarPlayerSkip (&app->player);
 }
 
 /*	song history

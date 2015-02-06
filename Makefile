@@ -31,6 +31,7 @@ PIANOBAR_SRC:=\
 		${PIANOBAR_DIR}/terminal.c \
 		${PIANOBAR_DIR}/ui_act.c \
 		${PIANOBAR_DIR}/ui.c \
+		${PIANOBAR_DIR}/player.c \
 		${PIANOBAR_DIR}/ui_readline.c \
 		${PIANOBAR_DIR}/ui_dispatch.c
 PIANOBAR_HDR:=\
@@ -40,6 +41,7 @@ PIANOBAR_HDR:=\
 		${PIANOBAR_DIR}/ui.h \
 		${PIANOBAR_DIR}/ui_readline.h \
 		${PIANOBAR_DIR}/main.h \
+		${PIANOBAR_DIR}/player.h \
 		${PIANOBAR_DIR}/config.h
 PIANOBAR_OBJ:=${PIANOBAR_SRC:.c=.o}
 

@@ -318,6 +318,9 @@ void BarSettingsRead (BarSettings_t *settings) {
 			} else if (streq ("fifo", key)) {
 				free (settings->fifo);
 				settings->fifo = BarSettingsExpandTilde (val, userhome);
+			} else if (streq ("player_command", key)) {
+				free (settings->playerCommand);
+				settings->playerCommand = strdup (val);
 			} else if (streq ("autoselect", key)) {
 				settings->autoselect = atoi (val);
 			} else if (streq ("tls_fingerprint", key)) {
