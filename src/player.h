@@ -30,9 +30,10 @@ typedef struct {
 	pid_t pid;
 	int stdin, stdout, stderr;
 	unsigned int songPlayed, songDuration;
+	const char *command;
 } BarPlayer;
 
-void BarPlayerInit (BarPlayer * const player);
+void BarPlayerInit (BarPlayer * const player, const char * const command);
 bool BarPlayerPlay (BarPlayer * const player, const PianoSong_t * const song);
 void BarPlayerCleanup (BarPlayer * const player);
 void BarPlayerSkip (BarPlayer * const player);

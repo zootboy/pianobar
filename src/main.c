@@ -418,9 +418,9 @@ int main (int argc, char **argv) {
 	gcry_control (GCRYCTL_INITIALIZATION_FINISHED, 0);
 	gnutls_global_init ();
 
-	BarPlayerInit (&app.player);
 	BarSettingsInit (&app.settings);
 	BarSettingsRead (&app.settings);
+	BarPlayerInit (&app.player, app.settings.playerCommand);
 
 	PianoReturn_t pret;
 	if ((pret = PianoInit (&app.ph, app.settings.partnerUser,

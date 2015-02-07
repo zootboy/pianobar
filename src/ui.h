@@ -56,5 +56,7 @@ void BarUiStartEventCmd (const BarSettings_t * const settings,
 int BarUiPianoCall (BarApp_t * const, PianoRequestType_t,
 		void *, PianoReturn_t *, WaitressReturn_t *);
 void BarUiHistoryPrepend (BarApp_t *app, PianoSong_t *song);
+void BarUiCustomFormat (char *dest, size_t destSize, const char *format,
+		const char *formatChars, const char **formatVals);
 
 #endif /* SRC_UI_H_46P20TS0 */

@@ -33,10 +33,15 @@ THE SOFTWARE.
 #include <piano.h>
 
 #include "player.h"
+#include "ui.h"
 
-void BarPlayerInit (BarPlayer * const player) {
+void BarPlayerInit (BarPlayer * const player, const char * const command) {
+	assert (player != NULL);
+	assert (command != NULL);
+
 	player->stdin = player->stdout = player->stderr = -1;
 	player->pid = BAR_NO_PLAYER;
+	player->command = command;
 }
 
 bool BarPlayerPlay (BarPlayer * const player, const PianoSong_t * const song) {
@@ -77,11 +82,12 @@ bool BarPlayerPlay (BarPlayer * const player, const PianoSong_t * const song) {
 		assert (ret != -1);
 
 		char expandedCommand[1024];
-		snprintf (expandedCommand, sizeof (expandedCommand), "mpv "
-				"--af=volume=%.2f "
-				"--msglevel=all=error:statusline=status "
-				"--status-msg='${=time-pos} ${=length}' "
-				"'%s'", song->fileGain, song->audioUrl);
+		char gain[16];
+		const char *formats[] = {gain, song->audioUrl};
+
+		snprintf (gain, sizeof (gain), "%.2f", song->fileGain);
+		BarUiCustomFormat (expandedCommand, sizeof (expandedCommand),
+				player->command, "vu", formats);
 		ret = execl ("/bin/sh", "/bin/sh", "-c", expandedCommand, (char *) NULL);
 		assert (ret != -1);
 		return EXIT_FAILURE;

@@ -11,6 +11,10 @@
 # Proxy (for those who are not living in the USA)
 #control_proxy = http://127.0.0.1:9090/
 
+# Audio playback
+# With MPV
+#player_command = mpv --af=volume=%v --msglevel=all=error:statusline=status --status-msg='${=time-pos} ${=length}' '%u'
+
 # Keybindings
 #act_help = ?
 #act_songlove = +

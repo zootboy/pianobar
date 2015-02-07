@@ -174,6 +174,7 @@ void BarSettingsRead (BarSettings_t *settings) {
 	settings->device = strdup ("android-generic");
 	settings->inkey = strdup ("R=U!LH$O2B#");
 	settings->outkey = strdup ("6#26FRL$ZWD");
+	settings->playerCommand = NULL;
 	settings->fifo = BarGetXdgConfigDir (PACKAGE "/ctl");
 	assert (settings->fifo != NULL);
 	memcpy (settings->tlsFingerprint, "\x2D\x0A\xFD\xAF\xA1\x6F\x4B\x5C\x0A"
