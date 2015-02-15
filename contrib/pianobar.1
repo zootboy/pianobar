@@ -318,11 +318,11 @@ password with
 .B password.
 
 .TP
-.B player_command = media-player '%u'
-Shell command run to play back audio files. The following format characters are
-supported: %v (song replaygain), %u (song url). Data printed to stdout or
-stderr and separated by \\r is parsed as song position and duration.  Keyboard
-shortcuts not used by pianobar are forwarded to this program's stdin.
+.B player_command = media-player "$audioUrl"
+Shell command run to play back audio files. The following shell variables are
+set: gain, audioUrl. Data printed to stdout or stderr and separated by \\n is
+parsed as song position and duration. Keyboard shortcuts not used by pianobar
+are forwarded to this program's stdin.
 
 .TP
 .B proxy = http://user:password@host:port/

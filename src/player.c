@@ -35,6 +35,8 @@ THE SOFTWARE.
 #include "player.h"
 #include "ui.h"
 
+/*	Initialize player structure; command should be a shell expression
+ */
 void BarPlayerInit (BarPlayer * const player, const char * const command) {
 	assert (player != NULL);
 	assert (command != NULL);
@@ -81,14 +83,14 @@ bool BarPlayerPlay (BarPlayer * const player, const PianoSong_t * const song) {
 		ret = dup2 (stderrpipe[1], STDERR_FILENO);
 		assert (ret != -1);
 
-		char expandedCommand[1024];
 		char gain[16];
-		const char *formats[] = {gain, song->audioUrl};
-
 		snprintf (gain, sizeof (gain), "%.2f", song->fileGain);
-		BarUiCustomFormat (expandedCommand, sizeof (expandedCommand),
-				player->command, "vu", formats);
-		ret = execl ("/bin/sh", "/bin/sh", "-c", expandedCommand, (char *) NULL);
+
+		setenv ("audioUrl", song->audioUrl, 1);
+		setenv ("gain", gain, 1);
+
+		/* XXX: mpv problem: tcgetpgrp is not guarded by isatty, returns -1 */
+		ret = execl ("/bin/sh", "/bin/sh", "-c", player->command, (void *) NULL);
 		assert (ret != -1);
 		return EXIT_FAILURE;
 	} else {
@@ -109,6 +111,9 @@ bool BarPlayerPlay (BarPlayer * const player, const PianoSong_t * const song) {
 	}
 }
 
+/*	Read player’s stdout/stderr; should be called regularly as most programs
+ *	block if the pipe is full (music stops)
+ */
 bool BarPlayerIO (BarPlayer * const player, const int fd) {
 	assert (player != NULL);
 	assert (fd >= 0);
@@ -124,7 +129,7 @@ bool BarPlayerIO (BarPlayer * const player, const int fd) {
 
 	/* parse player output */
 	char *start = buf, *end = buf;
-	while ((end = strchr (start, (int) '\r')) != NULL) {
+	while ((end = strchr (start, (int) '\n')) != NULL) {
 		assert (end < buf+sizeof (buf));
 		*end = '\0';
 		float position, duration;
@@ -132,18 +137,22 @@ bool BarPlayerIO (BarPlayer * const player, const int fd) {
 			player->songPlayed = position;
 			player->songDuration = duration;
 		}
-		start = end;
+		start = end+1;
 	}
 
 	return true;
 }
 
+/*	Skip current song
+ */
 void BarPlayerSkip (BarPlayer * const player) {
 	assert (player != NULL);
 	assert (player->pid != BAR_NO_PLAYER);
 	kill (player->pid, SIGTERM);
 }
 
+/*	Cleanup zombie and check return status
+ */
 void BarPlayerCleanup (BarPlayer * const player) {
 	int status;
 	const pid_t finished = waitpid (player->pid, &status, 0);
