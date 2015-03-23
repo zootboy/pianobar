@@ -805,36 +805,37 @@ static WaitressReturn_t WaitressConnect (WaitressHandle_t *waith) {
 			int pollres;
 
 			/* we need shorter timeouts for connect() */
-			fcntl (sock, F_SETFL, O_NONBLOCK);
+			pollres = fcntl (sock, F_SETFL, O_NONBLOCK);
+			assert (pollres != -1);
 
-			/* non-blocking connect will return immediately */
-			if (connect (sock, gacurr->ai_addr, gacurr->ai_addrlen) == -1) {
-				// Error if not in-progress or immediate success
-				if (errno != EINPROGRESS) {
-					// Close socket and try alternatives
-					close (sock);
-					continue;
-				}
-			}
-
-			pollres = WaitressPollLoop (sock, POLLOUT, waith->timeout);
-			if (pollres == 0) {
-				ret = WAITRESS_RET_TIMEOUT;
-			} else if (pollres == -1) {
-				ret = WAITRESS_RET_ERR;
-			} else {
-				/* check connect () return value */
-				socklen_t pollresSize = sizeof (pollres);
-				getsockopt (sock, SOL_SOCKET, SO_ERROR, &pollres,
-						&pollresSize);
-				if (pollres != 0) {
-					ret = WAITRESS_RET_CONNECT_REFUSED;
+			if (connect (sock, gacurr->ai_addr, gacurr->ai_addrlen) != -1) {
+				/* working */
+				waith->request.sockfd = sock;
+				break;
+			} else if (errno == EINPROGRESS) {
+				/* wait for connect to succeed */
+				pollres = WaitressPollLoop (sock, POLLOUT, waith->timeout);
+				if (pollres == 0) {
+					ret = WAITRESS_RET_TIMEOUT;
+				} else if (pollres == -1) {
+					ret = WAITRESS_RET_ERR;
 				} else {
-					/* this one is working */
-					waith->request.sockfd = sock;
-					break;
+					/* check connect () return value */
+					socklen_t pollresSize = sizeof (pollres);
+					getsockopt (sock, SOL_SOCKET, SO_ERROR, &pollres,
+							&pollresSize);
+					if (pollres != 0) {
+						ret = WAITRESS_RET_CONNECT_REFUSED;
+					} else {
+						/* this one is working */
+						waith->request.sockfd = sock;
+						break;
+					}
 				}
+			} else {
+				ret = WAITRESS_RET_ERR;
 			}
+
 			close (sock);
 		}
 	}
