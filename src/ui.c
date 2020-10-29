@@ -837,6 +837,9 @@ void BarUiStartEventCmd (const BarSettings_t *settings, const char *type,
 	pid_t chld;
 	int pipeFd[2];
 
+	/* This function is a handy place to know when detail strings have changed. */
+	BarShmemSetStrings(curStation, curSong, stations);
+
 	if (settings->eventCmd == NULL) {
 		/* nothing to do... */
 		return;

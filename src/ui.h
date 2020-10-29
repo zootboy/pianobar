@@ -32,6 +32,7 @@ THE SOFTWARE.
 #include "main.h"
 #include "ui_readline.h"
 #include "ui_types.h"
+#include "ipc.h"
 
 typedef void (*BarUiSelectStationCallback_t) (BarApp_t *app, char *buf);
 

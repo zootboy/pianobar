@@ -56,6 +56,7 @@ THE SOFTWARE.
 #include "ui.h"
 #include "ui_dispatch.h"
 #include "ui_readline.h"
+#include "ipc.h"
 
 /*	authenticate user
  */
@@ -320,6 +321,9 @@ static void BarMainPrintTime (BarApp_t *app) {
 	const unsigned int songPlayed = player->songPlayed;
 	pthread_mutex_unlock (&player->lock);
 
+	/* Pass the time data along to the shared mem. */
+	BarShmemSetTimes(songDuration, songPlayed);
+
 	if (songPlayed <= songDuration) {
 		songRemaining = songDuration - songPlayed;
 		sign[0] = '-';
@@ -450,6 +454,8 @@ int main (int argc, char **argv) {
 
 	BarSettingsInit (&app.settings);
 	BarSettingsRead (&app.settings);
+
+	BarShmemInit (&app, argv[0]);
 
 	PianoReturn_t pret;
 	if ((pret = PianoInit (&app.ph, app.settings.partnerUser,
