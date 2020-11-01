@@ -9,7 +9,7 @@
 
 #define SHMEM_LEN ( \
 	4 +   /* ipc_version;  Identifies the expected structure of the IPC block */ \
-	4 +   /* playback_status;  Playing / paused */ \
+	4 +   /* info_bitfield; Info about the playing song. */ \
 	128 + /* station_name[128]; */ \
 	128 + /* current_song_artist[128]; */ \
 	128 + /* current_song_album[128]; */ \
@@ -26,12 +26,12 @@
 	)
 
 #define PBIPC_VERSION 0x00000001
-#define PBIPC_PLAYBACK_PAUSED 0
-#define PBIPC_PLAYBACK_PLAYING 1
+#define PBIPC_INFOBIT_PLAYING (1<<0)
+#define PBIPC_INFOBIT_THUMBUP (1<<1)
 
 struct shmem_ptrs {
 	uint32_t *ipc_version;
-	uint32_t *playback_status;
+	uint32_t *info_bitfield;
 	char *station_name;
 	char *current_song_artist;
 	char *current_song_album;
@@ -87,8 +87,8 @@ void BarShmemInit (BarApp_t *app, char *binPath) {
 	}
 
 	sp.ipc_version = (uint32_t *)(shmem);
-	sp.playback_status = (uint32_t *)(((void *)sp.ipc_version) + 4);
-	sp.station_name = (char *)(((void *)sp.playback_status) + 4);
+	sp.info_bitfield = (uint32_t *)(((void *)sp.ipc_version) + 4);
+	sp.station_name = (char *)(((void *)sp.info_bitfield) + 4);
 	sp.current_song_artist = (char *)(((void *)sp.station_name) + 128);
 	sp.current_song_album = (char *)(((void *)sp.current_song_artist) + 128);
 	sp.current_song_title = (char *)(((void *)sp.current_song_album) + 128);
@@ -104,7 +104,7 @@ void BarShmemInit (BarApp_t *app, char *binPath) {
 
 
 	*sp.ipc_version = PBIPC_VERSION;
-	*sp.playback_status = PBIPC_PLAYBACK_PAUSED;
+	*sp.info_bitfield = 0;
 	sp.station_name[0] = '\0';
 	sp.current_song_artist[0] = '\0';
 	sp.current_song_album[0] = '\0';
@@ -182,14 +182,36 @@ void BarShmemSetStrings (const PianoStation_t *curStation, const PianoSong_t *cu
 		sp.next_song_coverart[0] = '\0';
 	}
 
+	if (curSong->rating == PIANO_RATE_LOVE) {
+		*sp.info_bitfield |= PBIPC_INFOBIT_THUMBUP;
+	} else {
+		*sp.info_bitfield &= ~PBIPC_INFOBIT_THUMBUP;
+	}
+
 	ShmemTouch ();
 }
 
-void BarShmemSetTimes (const unsigned int songDuration, const unsigned int songPlayed) {
+void BarShmemSetTimes (BarApp_t *app) {
 	if (shmem == NULL) return;
+	if (app == NULL) return;
+
+	player_t * const player = &app->player;
+
+	pthread_mutex_lock (&player->lock);
+	const unsigned int songDuration = player->songDuration;
+	const unsigned int songPlayed = player->songPlayed;
+	int playerNotDead = (player->mode != PLAYER_DEAD);
+	int playerPaused = player->doPause && playerNotDead;
+	pthread_mutex_unlock (&player->lock);
 
 	*sp.current_song_duration = songDuration;
 	*sp.current_song_played = songPlayed;
+
+	if (playerPaused) {
+		*sp.info_bitfield &= ~PBIPC_INFOBIT_PLAYING;
+	} else {
+		*sp.info_bitfield |= PBIPC_INFOBIT_PLAYING;
+	}
 
 	ShmemTouch ();
 }

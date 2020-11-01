@@ -321,9 +321,6 @@ static void BarMainPrintTime (BarApp_t *app) {
 	const unsigned int songPlayed = player->songPlayed;
 	pthread_mutex_unlock (&player->lock);
 
-	/* Pass the time data along to the shared mem. */
-	BarShmemSetTimes(songDuration, songPlayed);
-
 	if (songPlayed <= songDuration) {
 		songRemaining = songDuration - songPlayed;
 		sign[0] = '-';
@@ -401,6 +398,8 @@ static void BarMainLoop (BarApp_t *app) {
 		}
 
 		BarMainHandleUserInput (app);
+
+		BarShmemSetTimes (app);
 
 		/* show time */
 		if (BarPlayerGetMode (player) == PLAYER_PLAYING) {
